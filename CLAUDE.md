@@ -13,6 +13,7 @@ The main goal is to finetune a model on chess puzzles from the Lichess dataset, 
 The verifiers library provides several environment types for different RL training scenarios:
 
 ### 1. SingleTurnEnv - Simple Q&A Tasks
+
 Perfect for tasks like math problems, text completion, or chess puzzles where you need one response.
 
 ```python
@@ -35,6 +36,7 @@ env = vf.SingleTurnEnv(
 **Reference**: See `verifiers/examples/gsm8k.py` for math problems, `verifiers/examples/reverse_text.py` for text tasks.
 
 ### 2. ToolEnv - Multi-turn Tool Usage
+
 For agents that need to use tools like Python execution, search, or calculators.
 
 ```python
@@ -54,6 +56,7 @@ env = vf.ToolEnv(
 **Reference**: See `verifiers/examples/math_python.py` for complete tool usage patterns.
 
 ### 3. TextArenaEnv - Game Environments
+
 For interactive game-like environments (Wordle, etc.).
 
 ```python
@@ -67,6 +70,7 @@ env = vf.TextArenaEnv(
 **Reference**: See `verifiers/examples/wordle.py` for game environment setup.
 
 ### 4. Custom MultiTurnEnv
+
 For implementing custom interaction protocols.
 
 ```python
@@ -74,7 +78,7 @@ class ChessEnv(vf.MultiTurnEnv):
     def is_completed(self, messages, state, **kwargs):
         # Return True when puzzle is solved or max turns reached
         return state.get('solved', False) or len(messages) > 10
-    
+
     def env_response(self, messages, state, **kwargs):
         # Process move and return board state
         last_move = messages[-1]['content']
@@ -86,6 +90,7 @@ class ChessEnv(vf.MultiTurnEnv):
 ## Training Patterns
 
 ### Basic Training Script
+
 ```python
 import verifiers as vf
 
@@ -106,42 +111,14 @@ trainer = vf.GRPOTrainer(model=model, processing_class=tokenizer, env=env, args=
 trainer.train()
 ```
 
-### Chess Puzzle Training Example
-```python
-from datasets import load_dataset
+### Chess Puzzle Training
 
-# Load Lichess chess puzzles
-dataset = load_dataset("Lichess/chess-puzzles", split="train")
-dataset = dataset.map(lambda x: {
-    'question': f"FEN: {x['FEN']}\nSolve this chess puzzle.",
-    'answer': x['Moves']
-})
-
-# Create parser for structured output
-parser = vf.XMLParser(['think', 'answer'])
-system_prompt = f"""Analyze the chess position and find the best sequence of moves.
-
-Think through the position step by step, then provide your answer.
-{parser.get_format_str()}"""
-
-# Exact match reward
-def chess_moves_reward(completion, answer, **kwargs):
-    predicted = parser.parse_answer(completion) or ''
-    return 1.0 if predicted.strip() == answer.strip() else 0.0
-
-# Create environment
-env = vf.SingleTurnEnv(
-    dataset=dataset,
-    system_prompt=system_prompt,
-    parser=parser,
-    rubric=vf.Rubric([chess_moves_reward, parser.get_format_reward_func()], 
-                     weights=[1.0, 0.2])
-)
-```
+For the chess puzzle task, see the complete implementation in `chess_puzzle_experiment.py`.
 
 ## Running Training
 
 ### Start vLLM Server
+
 ```bash
 # Single GPU inference
 CUDA_VISIBLE_DEVICES=0 vf-vllm --model 'Qwen/Qwen2.5-1.5B-Instruct'
@@ -151,6 +128,7 @@ CUDA_VISIBLE_DEVICES=0,1 vf-vllm --model 'Qwen/Qwen2.5-1.5B-Instruct' --tensor-p
 ```
 
 ### Run GRPO Training
+
 ```bash
 # Single GPU training
 CUDA_VISIBLE_DEVICES=1 accelerate launch --num-processes 1 --config-file configs/zero3.yaml train.py
