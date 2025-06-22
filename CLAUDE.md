@@ -207,3 +207,59 @@ The project tests the hypothesis that high-level cognition emerges from competit
 ### Expected Emergent Concepts
 
 The framework aims to develop concepts like connectivity, symmetry, interior/exterior, and spatial vocabulary through competitive pressure rather than explicit supervision.
+
+## Culture Grid Naming System & Reversibility
+
+### Grid Naming Convention
+- **A**: First input grid
+- **f_A**: Transformed version of A (result of applying transformation function f to A)  
+- **B**: Second input grid
+- **f_B**: Transformed version of B (result of applying same transformation function f to B)
+
+### Token Mapping (grids.py:263-275)
+```python
+self.l2tok = {
+    "A": self.token_A,
+    "f_A": self.token_f_A,
+    "B": self.token_B, 
+    "f_B": self.token_f_B,
+}
+```
+
+### Bidirectional Quiz Structures (quiz_machine.py:96-100)
+```python
+self.understood_structures = [
+    (("A", "f_A", "B", "f_B"), (0, 0, 0, 1), (0, 0, 1, 0)),  # Forward: predict f_B
+    (("f_A", "A", "f_B", "B"), (0, 0, 0, 1), (0, 0, 1, 0)),  # Reverse: predict B
+    (("B", "f_B", "A", "f_A"), (0, 0, 0, 1), (0, 0, 0, 0)),  # Alternative order
+    (("f_B", "B", "f_A", "A"), (0, 0, 0, 1), (0, 0, 0, 0)),  # Alternative reverse
+]
+```
+
+### Quiz Generation Procedure (main.py:469-475)
+```python
+c_quizzes_procedure = [
+    (("f_B", "f_A", "A", "B"), (1, 0, 0, 0), model_transformer_hot),   # Predict f_B first
+    (("f_B", "f_A", "A", "B"), (0, 1, 1, 1), model_transformer_cold),  # Predict f_A,A,B
+    (("A", "f_A", "B", "f_B"), (0, 0, 0, 1), model_transformer_cold),  # Standard: predict f_B
+]
+```
+
+### Mask System
+- Tuple format: `(struct, mask, eval_mask)`
+- `mask`: (0,0,0,1) means predict 4th position, (1,0,0,0) means predict 1st position
+- `eval_mask`: (0,0,1,0) means evaluate on 3rd position for correctness
+
+### Validation Criteria
+For culture addition, puzzles must be:
+- Solvable by **all but one** model in forward direction: A,f_A,B → f_B
+- Solvable by **all but one** model in reverse direction: f_A,A,f_B → B
+- Pass probability thresholds: `proba_understands >= 0.95`, `proba_not_understands <= 0.5`
+- Non-trivial: `problem.trivial(c_quizzes) == False`
+
+This ensures transformations are genuine learnable patterns, not artifacts.
+
+## Memories
+
+- A new memory about the repository and its purpose was memorized
+- Use uv run infront to run programs (e.g. uv run python or uv run pytest)
