@@ -1,3 +1,6 @@
 [submodule "verifiers"]
 	path = verifiers
 	url = https://github.com/willccbb/verifiers.git
+[submodule "interpretability-culture"]
+	path = interpretability-culture
+	url = git@github.com:tom-pollak/interpretability-culture.git

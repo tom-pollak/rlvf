@@ -171,3 +171,39 @@ def lcs_reward(completion, answer, **kwargs):
 - All environments support async batch processing with configurable concurrency
 - Set `NCCL_P2P_DISABLE=1` if experiencing GPU communication issues
 - The framework requires vLLM server for efficient generation during training
+
+## Interpretability Culture Repository
+
+The `interpretability-culture/culture/` submodule contains an experimental framework by François Fleuret exploring emergent cognition through competitive language model training.
+
+### Core Concept
+
+The project tests the hypothesis that high-level cognition emerges from competition among agents in language/idea space. Communicating agents try to create content that is "smart but doable" - understandable by some agents but not all.
+
+### Key Components
+
+- **World Models**: 6x8 grids with moving "birds" (objects with color/direction)
+- **Competitive Training**: 5 GPT models compete by creating and solving quizzes
+- **Quiz Generation**: Models create puzzles that are solvable by most but not all competitors
+- **Culture Evolution**: Successful quizzes are added to shared training set
+
+### Training Process
+
+1. Train models on world physics (bird movement in grids)
+2. Select worst-performing model for improvement
+3. When model achieves >97.5% accuracy, it generates new quizzes
+4. Valid quizzes: solvable by all but one competitor in both time directions
+5. Add 1000 validated quizzes to "culture" (shared training set)
+6. Repeat cycle to evolve increasingly complex concepts
+
+### File Structure
+
+- `main.py` - Main training loop and model management
+- `sky.py`, `grids.py`, `wireworld.py`, `life.py` - Different world physics implementations
+- `mygpt.py` - Custom GPT implementation with caching
+- `quiz_machine.py` - Quiz generation and validation logic
+- `problem.py` - Base class for world physics problems
+
+### Expected Emergent Concepts
+
+The framework aims to develop concepts like connectivity, symmetry, interior/exterior, and spatial vocabulary through competitive pressure rather than explicit supervision.
