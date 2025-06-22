@@ -17,21 +17,25 @@ from datasets import load_dataset
 
 size = "1.5B"
 model_name = f"Qwen/Qwen2.5-{size}-Instruct"
+run_name = f"chess-puzzle-grpo-{size}"
 
 ## Dataset
 
 dataset = load_dataset("Lichess/chess-puzzles", split="train")
 
 
-def format_chess_puzzle(example):
+def format_chess_puzzle(batch):
     """Format chess puzzle for training"""
-    return {
-        "question": f"FEN: {example['FEN']}\nSolve this chess puzzle.",
-        "answer": example["Moves"],
-    }
+    return [
+        {
+            "question": f"FEN: {example['FEN']}\nSolve this chess puzzle.",
+            "answer": example["Moves"],
+        }
+        for example in batch
+    ]
 
 
-dataset = dataset.map(format_chess_puzzle)
+dataset = dataset.map(format_chess_puzzle, batched=True)
 
 eval_size = min(1000, len(dataset) // 10)  # 10% or 1000 examples for eval
 eval_dataset = dataset.select(range(eval_size))
@@ -103,7 +107,7 @@ env = vf.SingleTurnEnv(
 ## Model and Trainer
 model, tokenizer = vf.get_model_and_tokenizer(model_name)
 
-training_args = vf.grpo_defaults(run_name=f"chess-puzzle-grpo-{size}")
+training_args = vf.grpo_defaults(run_name=run_name)
 training_args.per_device_train_batch_size = 6
 training_args.num_generations = 12
 training_args.gradient_accumulation_steps = 4
@@ -120,3 +124,6 @@ trainer = vf.GRPOTrainer(
 
 ## Train!
 trainer.train()
+
+model.push_to_hub(f"tommyp111/{run_name}")
+tokenizer.push_to_hub(f"tommyp111/{run_name}")
