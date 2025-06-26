@@ -5,19 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Tom Pollak", email = "tompollak1000@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = [
-    "datasets>=3.6.0",
-    "verifiers",
-]
+# dependencies = ["datasets>=3.6.0", "verifiers"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv.sources]
-verifiers = { path = "verifiers", editable = true }
+# [tool.uv.sources]
+# verifiers = { path = "verifiers", editable = true }
 
 [dependency-groups]
-dev = [
-    "jupyterlab>=4.4.3",
-]
+dev = ["jupyterlab>=4.4.3"]
