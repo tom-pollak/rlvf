@@ -58,7 +58,6 @@ def mk_dataset_single(
     generator = PuzzlePromptGenerator(order)
     dataset = dataset.map(
         partial(format_puzzle_batch, generator=generator),
-        load_from_cache_file=False,
         batched=True,
         batch_size=batch_size,
         num_proc=num_proc,

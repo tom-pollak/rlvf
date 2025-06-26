@@ -16,7 +16,8 @@ CUDA_VISIBLE_DEVICES=2,3 accelerate launch --num-processes 2 --config-file verif
 """
 
 import verifiers as vf
-from 
+from datasets import load_dataset
+from rlvf.culture_puzzles import ascii_to_grid
 
 size = "1.5B"
 model_name = f"Qwen/Qwen2.5-{size}-Instruct"
@@ -59,9 +60,26 @@ I need to analyze the transformation from A to f_A:
 {parser.get_format_str()}"""
 
 
-def changed_cells_similarity(
-    original: np.ndarray, ground_truth: np.ndarray, predicted: np.ndarray
-) -> float:
+def format_culture_puzzle(batch):
+    return [
+        {
+            "question": example["question"],
+            "answer": example["grids"],
+        }
+        for example in batch
+    ]
+
+
+dataset = load_dataset("tommyp111/culture-puzzles-1M-prompt", split="forward")
+dataset = dataset.map(format_culture_puzzle, batched=True)
+
+
+eval_size = min(1000, len(dataset) // 10)  # 10% or 1000 examples for eval
+eval_dataset = dataset.select(range(eval_size))
+train_dataset = dataset.select(range(eval_size, len(dataset)))
+
+
+def changed_cells_similarity(original, ground_truth, predicted) -> float:
     """
     Calculate similarity focusing on cells that should change vs actually changed.
 
@@ -90,16 +108,25 @@ def changed_cells_similarity(
 
     # Union of all cells that either should change or did change
     relevant_mask = should_change_mask | did_change_mask
-    relevant_count = np.sum(relevant_mask)
+    relevant_count = relevant_mask.sum()
 
     # If no cells in either category, perfect match
     if relevant_count == 0:
         return 1.0
 
     # For cells in the relevant set, check if prediction matches ground truth
-    matching_relevant = np.sum((ground_truth == predicted) & relevant_mask)
+    matching_relevant = ((ground_truth == predicted) & relevant_mask).sum()
 
     return matching_relevant / relevant_count
+
+
+def culture_grid_reward(completion, answer, **kwargs):
+    predicted = parser.parse_answer(completion).strip() or ""
+    predicted_grid = ascii_to_grid(predicted)
+    original = answer["B"]
+    ground_truth = answer["f_B"]
+    return changed_cells_similarity(original, ground_truth, predicted_grid)
+
 
 rubric = vf.Rubric(
     funcs=[culture_grid_reward, parser.get_format_reward_func()],
@@ -107,8 +134,8 @@ rubric = vf.Rubric(
 )
 
 env = vf.SingleTurnEnv(
-    dataset=dd["train"],
-    eval_dataset=dd["test"],
+    dataset=train_dataset,
+    eval_dataset=eval_dataset,
     system_prompt=system_prompt,
     parser=parser,
     rubric=rubric,
