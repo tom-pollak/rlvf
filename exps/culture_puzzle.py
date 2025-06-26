@@ -28,7 +28,7 @@ run_name = f"culture-puzzle-grpo-{size}"
 
 parser = vf.XMLParser(["think", "answer"])
 
-system_prompt = f"""You are an expert at solving grid transformation puzzles. Given a pattern showing how one grid transforms into another, apply the same transformation to a new grid.
+system_prompt = f"""You are an expert at solving grid transformation puzzles.
 
 ## Rules
 
@@ -38,20 +38,22 @@ Think step-by-step inside <think>...</think> tags, then provide your answer as a
 - Use 'A' through 'J' for values
 - Separate each cell with a space
 - Provide exactly 10 rows of 10 cells each
-
+- You must provide BOTH <think> and <answer> tags.
 
 ## How to solve
 
-Analyze the transformation from A to f(A):
+There is a single transformation applied to grid A to map it to f(A). What is it?
 
 - Look for patterns in how cells change
 - Identify the transformation
-- Apply the same pattern to grid B to create f(B)
+- What cells in grid B would change as a result of the transformation f?
+
+Goal: Apply the transformation to grid B to create f(B)
 
 ## Example
 
 <think>
-Think here
+Think step by step here.
 </think>
 <answer>
 . . . A A A . . . .
@@ -78,14 +80,15 @@ def format_culture_puzzle(batch):
     else:
         return _single(batch)
 
-dataset = load_dataset("tommyp111/culture-puzzles-1M-prompt", split="forward")
+dataset = load_dataset("tommyp111/culture-puzzles-1M-prompt", split="forward[:10000]")
 dataset = dataset.map(format_culture_puzzle, batched=True, num_proc=12)
 dataset.set_format("torch")
 
 
 eval_size = 10
-eval_dataset = dataset.select(range(eval_size))
-train_dataset = dataset.select(range(eval_size, len(dataset)))
+dd = dataset.train_test_split(test_size=64)
+train_dataset = dd["train"]
+eval_dataset = dd["test"]
 
 
 def changed_cells_similarity(original, ground_truth, predicted) -> float:
@@ -128,20 +131,30 @@ def changed_cells_similarity(original, ground_truth, predicted) -> float:
 
     return (matching_relevant / relevant_count).item()
 
+def _parse_answer(completion):
+    predicted = parser.parse_answer(completion) or ""
+    if predicted is None: return None
+    predicted_grid = ascii_to_grid(predicted.strip())
+    return predicted_grid
+
+def valid_grid_reward(completion, answer, **kwargs):
+    predicted_grid = _parse_answer(completion)
+    return 1.0 if predicted_grid is not None else 0.0
+
 
 def culture_grid_reward(completion, answer, **kwargs):
-    predicted = parser.parse_answer(completion) or ""
-    if predicted is None: return 0.0
-    predicted_grid = ascii_to_grid(predicted.strip())
-    if predicted_grid is None: return 0.0
+    predicted_grid = _parse_answer(completion)
+    if predicted_grid is None:
+        return 0.0
+
     original = answer["B"]
     ground_truth = answer["f_B"]
     return changed_cells_similarity(original, ground_truth, torch.tensor(predicted_grid))
 
 
 rubric = vf.Rubric(
-    funcs=[culture_grid_reward, parser.get_format_reward_func()],
-    weights=[1.0, 0.1],  # (correct grid, format)
+    funcs=[culture_grid_reward, valid_grid_reward, parser.get_format_reward_func()],
+    weights=[1.5, 0.2, 0.1],  # (correct grid, valid grid, format)
 )
 
 env = vf.SingleTurnEnv(
@@ -154,12 +167,12 @@ env = vf.SingleTurnEnv(
 model, tokenizer = vf.get_model_and_tokenizer(model_name)
 
 training_args = vf.grpo_defaults(run_name=run_name)
-training_args.per_device_train_batch_size = 4
-training_args.num_generations = 8
+training_args.per_device_train_batch_size = 8
+training_args.num_generations = 16
 training_args.gradient_accumulation_steps = 2
 training_args.max_prompt_length = 1024
-training_args.max_completion_length = 4096
-training_args.max_steps = 200
+training_args.max_completion_length = 2048
+training_args.max_steps = 1000
 training_args.eval_steps = 200
 training_args.save_steps = 200
 training_args.logging_steps = 2
