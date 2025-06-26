@@ -9,15 +9,16 @@ similar to the interpretability-culture experiments by François Fleuret.
 
 Usage:
 # Start vLLM inference server
-CUDA_VISIBLE_DEVICES=0,1 vf-vllm --model 'Qwen/Qwen2.5-1.5B-Instruct' --tensor-parallel-size 2
+CUDA_VISIBLE_DEVICES=0,1,2,3 vf-vllm --model 'Qwen/Qwen2.5-1.5B-Instruct' --tensor-parallel-size 4
 
 # Run training
-CUDA_VISIBLE_DEVICES=2,3 accelerate launch --num-processes 2 --config-file verifiers/configs/zero3.yaml exps/culture_puzzle.py
+CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --num-processes 4 --config-file verifiers/configs/zero3.yaml exps/culture_puzzle.py
 """
 
 import verifiers as vf
 from datasets import load_dataset
 from rlvf.culture_puzzles import ascii_to_grid
+import torch
 
 size = "1.5B"
 model_name = f"Qwen/Qwen2.5-{size}-Instruct"
@@ -29,6 +30,8 @@ parser = vf.XMLParser(["think", "answer"])
 
 system_prompt = f"""You are an expert at solving grid transformation puzzles. Given a pattern showing how one grid transforms into another, apply the same transformation to a new grid.
 
+## Rules
+
 Think step-by-step inside <think>...</think> tags, then provide your answer as a 10x10 grid inside <answer>...</answer> tags.
 
 - Use '.' for empty cells
@@ -36,13 +39,19 @@ Think step-by-step inside <think>...</think> tags, then provide your answer as a
 - Separate each cell with a space
 - Provide exactly 10 rows of 10 cells each
 
-## Example Format:
 
-<think>
-I need to analyze the transformation from A to f_A:
+## How to solve
+
+Analyze the transformation from A to f(A):
+
 - Look for patterns in how cells change
 - Identify the transformation
-- Apply the same pattern to grid B
+- Apply the same pattern to grid B to create f(B)
+
+## Example
+
+<think>
+Think here
 </think>
 <answer>
 . . . A A A . . . .
@@ -55,26 +64,26 @@ I need to analyze the transformation from A to f_A:
 . . . . . . . . . .
 . . . . . . . . . .
 . . . . . . . . . .
-</answer>
-
-{parser.get_format_str()}"""
-
+</answer>"""
 
 def format_culture_puzzle(batch):
-    return [
-        {
+    def _single(example):
+        return {
             "question": example["question"],
             "answer": example["grids"],
         }
-        for example in batch
-    ]
 
+    if isinstance(batch, list):
+        return list(map(_single, batch))
+    else:
+        return _single(batch)
 
 dataset = load_dataset("tommyp111/culture-puzzles-1M-prompt", split="forward")
-dataset = dataset.map(format_culture_puzzle, batched=True)
+dataset = dataset.map(format_culture_puzzle, batched=True, num_proc=12)
+dataset.set_format("torch")
 
 
-eval_size = min(1000, len(dataset) // 10)  # 10% or 1000 examples for eval
+eval_size = 10
 eval_dataset = dataset.select(range(eval_size))
 train_dataset = dataset.select(range(eval_size, len(dataset)))
 
@@ -117,15 +126,17 @@ def changed_cells_similarity(original, ground_truth, predicted) -> float:
     # For cells in the relevant set, check if prediction matches ground truth
     matching_relevant = ((ground_truth == predicted) & relevant_mask).sum()
 
-    return matching_relevant / relevant_count
+    return (matching_relevant / relevant_count).item()
 
 
 def culture_grid_reward(completion, answer, **kwargs):
-    predicted = parser.parse_answer(completion).strip() or ""
-    predicted_grid = ascii_to_grid(predicted)
+    predicted = parser.parse_answer(completion) or ""
+    if predicted is None: return 0.0
+    predicted_grid = ascii_to_grid(predicted.strip())
+    if predicted_grid is None: return 0.0
     original = answer["B"]
     ground_truth = answer["f_B"]
-    return changed_cells_similarity(original, ground_truth, predicted_grid)
+    return changed_cells_similarity(original, ground_truth, torch.tensor(predicted_grid))
 
 
 rubric = vf.Rubric(
@@ -145,13 +156,13 @@ model, tokenizer = vf.get_model_and_tokenizer(model_name)
 training_args = vf.grpo_defaults(run_name=run_name)
 training_args.per_device_train_batch_size = 4
 training_args.num_generations = 8
-training_args.gradient_accumulation_steps = 8
+training_args.gradient_accumulation_steps = 2
 training_args.max_prompt_length = 1024
-training_args.max_completion_length = 2048
-training_args.max_steps = 2000
+training_args.max_completion_length = 4096
+training_args.max_steps = 200
 training_args.eval_steps = 200
-training_args.save_steps = 400
-training_args.logging_steps = 10
+training_args.save_steps = 200
+training_args.logging_steps = 2
 
 trainer = vf.GRPOTrainer(
     model=model, processing_class=tokenizer, env=env, args=training_args
