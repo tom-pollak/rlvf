@@ -9,7 +9,7 @@ similar to the interpretability-culture experiments by François Fleuret.
 
 Usage:
 # Start vLLM inference server
-CUDA_VISIBLE_DEVICES=0,1,2,3 vf-vllm --model 'Qwen/Qwen2.5-7B-Instruct' --tensor-parallel-size 4
+CUDA_VISIBLE_DEVICES=0,1,2,3 vf-vllm --model 'Qwen/Qwen2.5-3B-Instruct' --tensor-parallel-size 4
 
 # Run training
 CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --num-processes 4 --config-file verifiers/configs/zero3.yaml exps/culture_puzzle.py
@@ -20,7 +20,7 @@ from datasets import load_dataset
 from rlvf.culture_puzzles import ascii_to_grid
 import torch
 
-size = "7B"
+size = "3B"
 model_name = f"Qwen/Qwen2.5-{size}-Instruct"
 run_name = f"culture-puzzle-grpo-{size}"
 
@@ -30,10 +30,11 @@ parser = vf.XMLParser(["think", "answer"])
 
 system_prompt = f"""Think step-by-step inside <think>...</think> tags, then provide your answer as a 10x10 grid inside <answer>...</answer> tags.
 
-- Use '.' for empty cells
-- Use 'A' through 'J' for values
-- Separate each cell with a space
-- Provide exactly 10 rows of 10 cells each
+- Use '.' for empty cells.
+- Use 'A' through 'J' for values.
+- Separate each cell with a space.
+- Provide exactly 10 rows of 10 cells each.
+- You must include BOTH <think> and <answer> tags.
 
 ## How to solve
 
@@ -45,7 +46,7 @@ There is a single transformation applied to grid A to map it to f(A).
 ## Example
 
 <think>
-Think step-by-step.
+Think step-by-step...
 </think>
 <answer>
 . . . A A A . . . .
@@ -134,19 +135,23 @@ def valid_grid_reward(completion, answer, **kwargs):
     return 1.0 if predicted_grid is not None else 0.0
 
 
-def culture_grid_reward(completion, answer, **kwargs):
+def correct_cell_reward(completion, answer, **kwargs):
     predicted_grid = _parse_answer(completion)
-    if predicted_grid is None:
-        return 0.0
+    if predicted_grid is None: return 0.0
 
     original = answer["B"]
-    ground_truth = answer["f_B"]
+    ground_truth = answer["f(B)"]
     return changed_cells_similarity(original, ground_truth, torch.tensor(predicted_grid))
 
+def exact_match_reward(completion, answer, **kwargs):
+    predicted_grid = _parse_answer(completion)
+    if predicted_grid is None: return 0.0
+    is_match = torch.all(predicted_grid == answer["f(B)"]).item()
+    return 1.0 if is_match else 0.0
 
 rubric = vf.Rubric(
-    funcs=[culture_grid_reward, valid_grid_reward, parser.get_format_reward_func()],
-    weights=[1.5, 0.2, 0.1],  # (correct grid, valid grid, format)
+    funcs=[exact_match_reward, correct_cell_reward, valid_grid_reward, parser.get_format_reward_func()],
+    weights=[1, 0.6, 0.2, 0.1],  # (exact match, correct cells, valid grid, format)
 )
 
 env = vf.SingleTurnEnv(
