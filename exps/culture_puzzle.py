@@ -28,38 +28,9 @@ run_name = f"culture-puzzle-grpo-{size}"
 
 parser = vf.XMLParser(["think", "answer"])
 
-system_prompt = f"""Think step-by-step inside <think>...</think> tags, then provide your answer as a 10x10 grid inside <answer>...</answer> tags.
+system_prompt = f"""Think step-by-step inside <think>...</think> tags.
 
-- Use '.' for empty cells.
-- Use 'A' through 'J' for values.
-- Separate each cell with a space.
-- Provide exactly 10 rows of 10 cells each.
-- You must include BOTH <think> and <answer> tags.
-
-## How to solve
-
-There is a single transformation applied to grid A to map it to f(A).
-
-- Look for patterns in how cells change from A to f(A).
-- What cells in grid B would change as a result of the transformation f?
-
-## Example
-
-<think>
-Think step-by-step...
-</think>
-<answer>
-. . . A A A . . . .
-. . . A B A . . . .
-. . . A A A . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-. . . . . . . . . .
-</answer>"""
+Then, give your final answer as a 10x10 grid inside <answer>...</answer> tags."""
 
 def format_culture_puzzle(batch):
     def _single(example):
@@ -151,7 +122,7 @@ def exact_match_reward(completion, answer, **kwargs):
 
 rubric = vf.Rubric(
     funcs=[exact_match_reward, correct_cell_reward, valid_grid_reward, parser.get_format_reward_func()],
-    weights=[1, 0.6, 0.2, 0.1],  # (exact match, correct cells, valid grid, format)
+    weights=[1, 0.7, 0.3, 0.1],  # (exact match, correct cells, valid grid, format)
 )
 
 env = vf.SingleTurnEnv(
