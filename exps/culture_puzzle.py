@@ -28,32 +28,24 @@ run_name = f"culture-puzzle-grpo-{size}"
 
 parser = vf.XMLParser(["think", "answer"])
 
-system_prompt = f"""You are an expert at solving grid transformation puzzles.
-
-## Rules
-
-Think step-by-step inside <think>...</think> tags, then provide your answer as a 10x10 grid inside <answer>...</answer> tags.
+system_prompt = f"""Think step-by-step inside <think>...</think> tags, then provide your answer as a 10x10 grid inside <answer>...</answer> tags.
 
 - Use '.' for empty cells
 - Use 'A' through 'J' for values
 - Separate each cell with a space
 - Provide exactly 10 rows of 10 cells each
-- You must provide BOTH <think> and <answer> tags.
 
 ## How to solve
 
-There is a single transformation applied to grid A to map it to f(A). What is it?
+There is a single transformation applied to grid A to map it to f(A).
 
-- Look for patterns in how cells change
-- Identify the transformation
+- Look for patterns in how cells change from A to f(A).
 - What cells in grid B would change as a result of the transformation f?
-
-Goal: Apply the transformation to grid B to create f(B)
 
 ## Example
 
 <think>
-Think step by step here.
+Think step-by-step.
 </think>
 <answer>
 . . . A A A . . . .
@@ -80,7 +72,7 @@ def format_culture_puzzle(batch):
     else:
         return _single(batch)
 
-dataset = load_dataset("tommyp111/culture-puzzles-1M-prompt", split="forward[:10000]")
+dataset = load_dataset("tommyp111/culture-puzzles-10k-prompt", split="forward")
 dataset = dataset.map(format_culture_puzzle, batched=True, num_proc=12)
 dataset.set_format("torch")
 
@@ -168,8 +160,8 @@ model, tokenizer = vf.get_model_and_tokenizer(model_name)
 
 training_args = vf.grpo_defaults(run_name=run_name)
 training_args.per_device_train_batch_size = 8
-training_args.num_generations = 16
-training_args.gradient_accumulation_steps = 2
+training_args.num_generations = 8
+training_args.gradient_accumulation_steps = 4
 training_args.max_prompt_length = 1024
 training_args.max_completion_length = 2048
 training_args.max_steps = 1000
