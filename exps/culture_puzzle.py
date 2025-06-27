@@ -9,7 +9,7 @@ similar to the interpretability-culture experiments by François Fleuret.
 
 Usage:
 # Start vLLM inference server
-CUDA_VISIBLE_DEVICES=0,1,2,3 vf-vllm --model 'Qwen/Qwen2.5-1.5B-Instruct' --tensor-parallel-size 4
+CUDA_VISIBLE_DEVICES=0,1,2,3 vf-vllm --model 'Qwen/Qwen2.5-7B-Instruct' --tensor-parallel-size 4
 
 # Run training
 CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --num-processes 4 --config-file verifiers/configs/zero3.yaml exps/culture_puzzle.py
@@ -20,7 +20,7 @@ from datasets import load_dataset
 from rlvf.culture_puzzles import ascii_to_grid
 import torch
 
-size = "1.5B"
+size = "7B"
 model_name = f"Qwen/Qwen2.5-{size}-Instruct"
 run_name = f"culture-puzzle-grpo-{size}"
 
